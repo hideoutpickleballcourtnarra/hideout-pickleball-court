@@ -239,3 +239,33 @@ $$;
 grant execute on function public.submit_booking_receipt(uuid,text,text,text,text) to anon, authenticated;
 grant execute on function public.admin_list_booking_receipts(text,text) to anon, authenticated;
 grant execute on function public.admin_mark_receipt_reviewed(text,text,uuid) to anon, authenticated;
+
+
+create or replace function public.admin_list_bookings(p_username text,p_password text)
+returns table(
+  booking_id uuid, customer_name text, phone text, booking_date date,
+  players integer, paddle_sets integer, total_amount integer,
+  payment_option integer, payment_amount integer, status text,
+  created_at timestamptz, receipt_count bigint
+)
+language plpgsql security definer set search_path = public
+as $$
+begin
+  if not exists (
+    select 1 from public.court_admin_credentials a
+    where a.id = 1 and a.username = p_username
+      and a.password_hash = crypt(p_password,a.password_hash)
+  ) then
+    raise exception 'Incorrect admin username or password.';
+  end if;
+  return query
+  select b.id,b.customer_name,b.phone,b.booking_date,b.players,b.paddle_sets,
+         b.total_amount,b.payment_option,b.payment_amount,b.status,b.created_at,
+         count(r.id)
+  from public.court_bookings b
+  left join public.court_booking_receipts r on r.booking_id = b.id
+  group by b.id
+  order by b.created_at desc;
+end;
+$$;
+grant execute on function public.admin_list_bookings(text,text) to anon, authenticated;
