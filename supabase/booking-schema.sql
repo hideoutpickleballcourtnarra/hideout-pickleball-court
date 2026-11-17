@@ -1,3 +1,15 @@
+do $$
+begin
+  if exists (
+    select 1 from pg_extension e
+    join pg_namespace n on n.oid = e.extnamespace
+    where e.extname = 'pgcrypto' and n.nspname <> 'extensions'
+  ) then
+    execute 'alter extension pgcrypto set schema extensions';
+  end if;
+end;
+$$;
+
 -- Hideout Pickleball Court booking database
 -- Run this entire file once in Supabase SQL Editor.
 
