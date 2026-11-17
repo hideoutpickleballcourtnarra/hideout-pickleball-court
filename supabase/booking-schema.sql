@@ -17,6 +17,9 @@ create table if not exists public.court_bookings (
   created_at timestamptz not null default now()
 );
 
+alter table public.court_bookings add column if not exists payment_option integer not null default 100 check (payment_option in (50,100));
+alter table public.court_bookings add column if not exists payment_amount integer not null default 0 check (payment_amount >= 0);
+
 create table if not exists public.court_booking_slots (
   id bigint generated always as identity primary key,
   booking_id uuid not null references public.court_bookings(id) on delete cascade,
@@ -50,6 +53,8 @@ as $$
   where s.booking_date = p_date and b.status = 'confirmed'
   order by s.court_number, s.start_hour;
 $$;
+
+drop function if exists public.create_booking(text,text,date,integer,integer,jsonb);
 
 create or replace function public.create_booking(
   p_customer_name text,
