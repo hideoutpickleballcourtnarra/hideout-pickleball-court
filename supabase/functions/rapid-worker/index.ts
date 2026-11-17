@@ -66,6 +66,7 @@ serve(async (req) => {
           to: booking.customer_email,
           subject: String(body?.subject || "Booking confirmed — Hideout Pickleball Court"),
           body: String(body?.message || "Your booking at Hideout Pickleball Court is confirmed."),
+          htmlBody: String(body?.htmlBody || ""),
         }),
       });
 
