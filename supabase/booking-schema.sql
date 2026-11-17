@@ -103,18 +103,18 @@ begin
            + (v_slot_count * greatest(p_players - 4, 0) * 20)
            + (p_paddle_sets * 50);
 
-  insert into public.court_bookings
-    (customer_name, phone, booking_date, players, paddle_sets, total_amount, status)
-  values
-    (trim(p_customer_name), trim(p_phone), p_date, p_players, p_paddle_sets, v_total, 'confirmed')
-  returning id into v_booking_id;
-
   begin
+    insert into public.court_bookings
+      (customer_name, phone, booking_date, players, paddle_sets, total_amount, status)
+    values
+      (trim(p_customer_name), trim(p_phone), p_date, p_players, p_paddle_sets, v_total, 'confirmed')
+    returning id into v_booking_id;
+
     insert into public.court_booking_slots (booking_id, booking_date, court_number, start_hour)
     select v_booking_id, p_date, x.court, x.hour
     from jsonb_to_recordset(p_slots) as x(court integer, hour integer);
   exception when unique_violation then
-    raise exception 'A selected slot was just been booked. Please choose another time.';
+    raise exception 'A selected slot was just booked. Please choose another time.';
   end;
 
   return jsonb_build_object('booking_id', v_booking_id, 'total_amount', v_total);
