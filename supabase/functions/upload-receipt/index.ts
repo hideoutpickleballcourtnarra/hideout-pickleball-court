@@ -30,9 +30,9 @@ serve(async (req) => {
     }
 
     const body = await req.json();
-    const { booking_id, phone, fileName, mimeType, base64 } = body ?? {};
+    const { booking_id, receipt_id, phone, fileName, mimeType, base64 } = body ?? {};
 
-    if (!booking_id || !phone || !fileName || !mimeType || !base64) {
+    if (!booking_id || !receipt_id || !phone || !fileName || !mimeType || !base64) {
       return respond({ error: "Missing receipt information." }, 400);
     }
 
@@ -69,7 +69,24 @@ serve(async (req) => {
       return respond({ error: driveResult?.error || "Google Drive upload failed." }, 502);
     }
 
-    return respond({ success: true, fileId: driveResult.fileId });
+    const receiptUpdate = await fetch(
+      `${supabaseUrl}/rest/v1/court_booking_receipts?id=eq.${encodeURIComponent(receipt_id)}&booking_id=eq.${encodeURIComponent(booking_id)}`,
+      {
+        method: "PATCH",
+        headers: {
+          apikey: serviceKey,
+          Authorization: `Bearer ${serviceKey}`,
+          "Content-Type": "application/json",
+          Prefer: "return=minimal",
+        },
+        body: JSON.stringify({ drive_file_id: String(driveResult.fileId) }),
+      },
+    );
+    if (!receiptUpdate.ok) {
+      return respond({ error: "Receipt reached Google Drive, but its backup confirmation could not be saved. It will not be auto-deleted from Supabase." }, 502);
+    }
+
+    return respond({ success: true, fileId: driveResult.fileId, receiptId: receipt_id });
   } catch (error) {
     return respond({ error: error instanceof Error ? error.message : "Unexpected upload error." }, 500);
   }
