@@ -63,6 +63,31 @@ const supabaseClient = window.supabase.createClient(
   "sb_publishable_eQBVn6OP9wB0DlWCRfb4DQ_YNPSaJ26"
 );
 </script>
+<script>
+document.getElementById("bookingForm").addEventListener("submit", async function(e) {
+  e.preventDefault();
 
+  const name = document.getElementById("customerName").value;
+  const phone = document.getElementById("phone").value;
+  const date = document.getElementById("bookingDate").value;
+  const time = document.getElementById("startTime").value;
+  const hours = Number(document.getElementById("hours").value);
+
+  const { error } = await supabaseClient.from("bookings").insert([{
+    customer_name: name,
+    phone: phone,
+    booking_date: date,
+    start_time: time,
+    hours: hours,
+    total_amount: hours * 100,
+    status: "confirmed"
+  }]);
+
+  document.getElementById("bookingMessage").textContent =
+    error ? "Booking failed: " + error.message : "Booking confirmed!";
+
+  if (!error) this.reset();
+});
+</script>
 </body>
 </html>
