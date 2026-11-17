@@ -43,7 +43,19 @@ for(let c=1;c<=2;c++){const card=document.createElement('div');card.className='c
 function update(){const n=selected.size,p=Math.max(1,Number(document.getElementById('players').value)||1),s=Math.max(0,Number(document.getElementById('sets').value)||0),extra=Math.max(0,p-4);const court=n*100,extras=n*extra*20,rent=s*50,total=court+extras+rent;document.getElementById('count').textContent=n;document.getElementById('total').textContent=total.toLocaleString('en-PH',{style:'currency',currency:'PHP'});document.getElementById('breakdown').textContent=`Court: ₱${court} · Extra players: ₱${extras} · Paddle + ball sets: ₱${rent}. Demo estimate only.`}
 document.getElementById('players').addEventListener('input',update);document.getElementById('sets').addEventListener('input',update);update();
 </script>
-</body></html>
+<h2>Book a Court</h2>
+
+<form id="bookingForm">
+  <input id="customerName" placeholder="Full Name" required>
+  <input id="phone" placeholder="Phone Number" required>
+  <input id="bookingDate" type="date" required>
+  <input id="startTime" type="time" required>
+  <input id="hours" type="number" min="1" value="1" required>
+  <button type="submit">Book Now</button>
+</form>
+
+<p id="bookingMessage"></p>
+
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script>
 const supabaseClient = window.supabase.createClient(
@@ -51,3 +63,6 @@ const supabaseClient = window.supabase.createClient(
   "sb_publishable_eQBVn6OP9wB0DlWCRfb4DQ_YNPSaJ26"
 );
 </script>
+
+</body>
+</html>
