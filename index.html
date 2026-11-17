@@ -31,6 +31,9 @@ section{padding:30px 0}.section-title{font-size:25px;color:var(--green);margin:0
 <div class="field payment-choice" style="margin:18px 0 10px;max-width:420px"><label for="paymentOption">How would you like to pay?</label><select id="paymentOption"><option value="50">50% deposit — pay half now</option><option value="100">Full payment — pay the entire amount now</option></select></div><div class="summary"><div>Selected hours: <b id="count">0</b></div><div>Estimated total</div><strong id="total">₱0.00</strong><div style="margin-top:10px;font-weight:750">Amount to pay now</div><strong id="amountDue">₱0.00</strong><p class="note" id="breakdown">Select one or more slots to see your estimate.</p></div>
 <form id="bookingForm" class="controls" style="display:block;margin-top:18px"><div class="controls"><div class="field"><label for="customerName">Full name</label><input id="customerName" autocomplete="name" required maxlength="120" placeholder="Your full name"></div><div class="field"><label for="phone">Mobile number</label><input id="phone" type="tel" autocomplete="tel" required maxlength="30" placeholder="09XX XXX XXXX"></div></div><div class="price" style="margin:12px 0"><b>GCash payment</b><div>Account Name: LI…..Y A.</div><div>Account Number: 0966 802 1779</div><small>Pay the amount shown after selecting your booking hours. Upload your receipt after booking.</small></div><button class="btn primary" id="bookButton" type="submit" disabled>Confirm booking</button><p id="bookingMessage" class="note" role="status" aria-live="polite">Select a date to load availability.</p></form>
 </div></div></section>
+
+<section id="receipt-upload"><div class="wrap"><h2 class="section-title">Upload your GCash receipt</h2><p class="sub">After booking and payment, enter your booking reference and mobile number to send your receipt. Your booking is already confirmed; receipt checking is for records only.</p><form id="receiptForm" class="booking"><div class="controls"><div class="field"><label for="receiptBookingId">Booking reference</label><input id="receiptBookingId" required placeholder="Paste your booking reference"></div><div class="field"><label for="receiptPhone">Mobile number used for booking</label><input id="receiptPhone" required type="tel" placeholder="09XX XXX XXXX"></div><div class="field"><label for="receiptFile">GCash receipt (JPG, PNG, WEBP, or PDF; max 2 MB)</label><input id="receiptFile" required type="file" accept="image/jpeg,image/png,image/webp,application/pdf"></div></div><button class="btn primary" id="receiptButton" type="submit">Upload receipt</button><p id="receiptMessage" class="note" role="status" aria-live="polite"></p></form></div></section>
+<section id="admin"><div class="wrap"><h2 class="section-title">Admin access</h2><p class="sub">Private area for Hideout Pickleball Court administration.</p><form id="adminLoginForm" class="booking"><div class="controls"><div class="field"><label for="adminUsername">Username</label><input id="adminUsername" value="admin" autocomplete="username" required></div><div class="field"><label for="adminPassword">Password</label><input id="adminPassword" type="password" autocomplete="current-password" required></div></div><button class="btn primary" id="adminLoginButton" type="submit">Admin login</button><p id="adminMessage" class="note" role="status" aria-live="polite"></p></form><div id="adminDashboard" hidden><div style="display:flex;gap:12px;align-items:center;flex-wrap:wrap;margin:18px 0"><h3 style="margin:0">Bookings and receipts</h3><button class="btn secondary" id="adminRefresh" type="button">Refresh</button><button class="btn secondary" id="adminLogout" type="button">Log out</button></div><div id="adminBookings"></div><h3>Uploaded receipts</h3><div id="adminReceipts"></div></div></div></section>
 </main>
 <footer><div class="wrap">© <span id="year"></span> Hideout Pickleball Court · Open 24/7</div></footer>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
@@ -45,6 +48,74 @@ function update(){const n=selected.size,p=Math.max(1,Number(document.getElementB
 async function loadAvailability(){selected.clear();update();document.querySelectorAll('.slot').forEach(b=>{b.disabled=true;b.classList.remove('selected','booked');b.setAttribute('aria-pressed','false')});document.getElementById('bookingMessage').textContent='Loading live availability…';const {data,error}=await supabaseClient.rpc('get_booked_slots',{p_date:dateEl.value});if(error){document.getElementById('bookingMessage').textContent='Live availability is not ready yet. Please try again later.';return;}const busy=new Set((data||[]).map(x=>`${x.court_number}-${x.start_hour}`));document.querySelectorAll('.slot').forEach(b=>{if(busy.has(b.dataset.key)){b.classList.add('booked');b.disabled=true;}else{b.disabled=false;}});document.getElementById('bookingMessage').textContent='Availability updated. Select your preferred hours.';}
 dateEl.addEventListener('change',loadAvailability);document.getElementById('players').addEventListener('input',update);document.getElementById('sets').addEventListener('change',update);document.getElementById('paddleChoice').addEventListener('change',update);document.getElementById('paymentOption').addEventListener('change',update);
 document.getElementById('bookingForm').addEventListener('submit',async e=>{e.preventDefault();if(!selected.size)return;const button=document.getElementById('bookButton');button.disabled=true;button.textContent='Submitting…';const slots=[...selected].map(k=>{const [court,hour]=k.split('-').map(Number);return {court,hour};});const {data,error}=await supabaseClient.rpc('create_booking',{p_customer_name:document.getElementById('customerName').value.trim(),p_phone:document.getElementById('phone').value.trim(),p_date:dateEl.value,p_players:Number(document.getElementById('players').value),p_paddle_sets:document.getElementById('paddleChoice').value==='yes'?Number(document.getElementById('sets').value):0,p_payment_option:document.getElementById('paymentOption').value,p_slots:slots});if(error){const resultMessage=error.message.includes('just been booked')?'A selected slot was just taken. Please choose another time.':'Booking could not be completed: '+error.message;await loadAvailability();document.getElementById('bookingMessage').textContent=resultMessage;}else{const resultMessage=`Booking confirmed! Reference: ${data.booking_id}. Total: ₱${Number(data.total_amount).toLocaleString('en-PH')}. Pay now: ₱${Number(data.payment_amount).toLocaleString('en-PH')} (${data.payment_option}% payment). Send your GCash receipt to the court admin.`;selected.clear();document.getElementById('bookingForm').reset();await loadAvailability();document.getElementById('bookingMessage').textContent=resultMessage;}button.textContent='Confirm booking';update();});
+
+let adminSession=null;
+function safeText(value){return value==null?'':String(value)}
+document.getElementById('receiptForm').addEventListener('submit',async e=>{
+ e.preventDefault();
+ const file=document.getElementById('receiptFile').files[0],btn=document.getElementById('receiptButton'),msg=document.getElementById('receiptMessage');
+ if(!file)return;
+ if(file.size>2*1024*1024){msg.textContent='File is too large. Maximum size is 2 MB.';return;}
+ if(!['image/jpeg','image/png','image/webp','application/pdf'].includes(file.type)){msg.textContent='Please choose a JPG, PNG, WEBP, or PDF file.';return;}
+ btn.disabled=true;btn.textContent='Uploading…';msg.textContent='';
+ try{
+  const dataUrl=await new Promise((resolve,reject)=>{const reader=new FileReader();reader.onload=()=>resolve(reader.result);reader.onerror=reject;reader.readAsDataURL(file);});
+  const base64=String(dataUrl).split(',')[1];
+  const {data,error}=await supabaseClient.rpc('submit_booking_receipt',{
+   p_booking_id:document.getElementById('receiptBookingId').value.trim(),
+   p_phone:document.getElementById('receiptPhone').value.trim(),
+   p_file_name:file.name,p_mime_type:file.type,p_data_base64:base64
+  });
+  if(error)throw error;
+  msg.textContent='Receipt uploaded successfully. Thank you!';
+  document.getElementById('receiptForm').reset();
+ }catch(err){msg.textContent='Upload failed: '+(err.message||'Please try again.');}
+ finally{btn.disabled=false;btn.textContent='Upload receipt';}
+});
+async function loadAdminDashboard(){
+ if(!adminSession)return;
+ const {username,password}=adminSession;
+ const [bookingsResult,receiptsResult]=await Promise.all([
+  supabaseClient.rpc('admin_list_bookings',{p_username:username,p_password:password}),
+  supabaseClient.rpc('admin_list_booking_receipts',{p_username:username,p_password:password})
+ ]);
+ if(bookingsResult.error||receiptsResult.error){document.getElementById('adminMessage').textContent='Could not load admin records. Please log in again.';return;}
+ const bookings=document.getElementById('adminBookings');bookings.replaceChildren();
+ if(!bookingsResult.data?.length){bookings.textContent='No bookings yet.';}else{
+  const table=document.createElement('div');table.style.overflowX='auto';
+  const t=document.createElement('table');t.style.width='100%';t.style.borderCollapse='collapse';
+  const headers=['Date','Customer','Mobile','Players','Paddle sets','Total','Pay option','Paid now','Receipts','Status'];
+  const thead=document.createElement('thead'),hr=document.createElement('tr');
+  headers.forEach(x=>{const th=document.createElement('th');th.textContent=x;th.style.cssText='text-align:left;padding:9px;border-bottom:1px solid #ccc;white-space:nowrap';hr.appendChild(th)});thead.appendChild(hr);t.appendChild(thead);
+  const tbody=document.createElement('tbody');
+  bookingsResult.data.forEach(b=>{const tr=document.createElement('tr');const vals=[b.booking_date,b.customer_name,b.phone,b.players,b.paddle_sets,b.total_amount,' '+b.payment_option+'%',b.payment_amount,b.receipt_count,b.status];vals.forEach((v,i)=>{const td=document.createElement('td');td.textContent=i===5||i===7?'₱'+Number(v).toLocaleString('en-PH'):safeText(v);td.style.cssText='padding:9px;border-bottom:1px solid #ddd;white-space:nowrap';tr.appendChild(td)});tbody.appendChild(tr)});
+  t.appendChild(tbody);table.appendChild(t);bookings.appendChild(table);
+ }
+ const list=document.getElementById('adminReceipts');list.replaceChildren();
+ if(!receiptsResult.data?.length){list.textContent='No receipts uploaded yet.';return;}
+ receiptsResult.data.forEach(r=>{
+  const card=document.createElement('div');card.className='price';card.style.margin='12px 0';
+  const title=document.createElement('b');title.textContent=r.customer_name+' · '+r.booking_date;card.appendChild(title);
+  const details=document.createElement('p');details.textContent='Booking: '+r.booking_id+' · Mobile: '+r.phone+' · Pay now: ₱'+Number(r.payment_amount).toLocaleString('en-PH')+' ('+r.payment_option+'%) · Uploaded: '+new Date(r.uploaded_at).toLocaleString();card.appendChild(details);
+  const link=document.createElement('a');link.textContent='Open '+r.file_name;link.href='data:'+r.mime_type+';base64,'+r.data_base64;link.target='_blank';link.rel='noopener';link.className='btn secondary';link.style.display='inline-block';link.style.marginRight='10px';card.appendChild(link);
+  const status=document.createElement('span');status.textContent=r.reviewed_at?'Reviewed':'Not reviewed';status.style.marginRight='10px';card.appendChild(status);
+  if(!r.reviewed_at){const mark=document.createElement('button');mark.type='button';mark.className='btn primary';mark.textContent='Mark reviewed';mark.addEventListener('click',async()=>{mark.disabled=true;const {error}=await supabaseClient.rpc('admin_mark_receipt_reviewed',{p_username:username,p_password:password,p_receipt_id:r.receipt_id});if(error){mark.disabled=false;document.getElementById('adminMessage').textContent=error.message;}else await loadAdminDashboard();});card.appendChild(mark);}
+  list.appendChild(card);
+ });
+}
+document.getElementById('adminLoginForm').addEventListener('submit',async e=>{
+ e.preventDefault();const btn=document.getElementById('adminLoginButton'),msg=document.getElementById('adminMessage');
+ btn.disabled=true;btn.textContent='Signing in…';msg.textContent='';
+ const candidate={username:document.getElementById('adminUsername').value.trim(),password:document.getElementById('adminPassword').value};
+ const {data,error}=await supabaseClient.rpc('admin_list_bookings',{p_username:candidate.username,p_password:candidate.password});
+ btn.disabled=false;btn.textContent='Admin login';
+ if(error){msg.textContent='Login failed: '+error.message;return;}
+ adminSession=candidate;document.getElementById('adminDashboard').hidden=false;document.getElementById('adminLoginForm').hidden=true;msg.textContent='Signed in as admin.';
+ await loadAdminDashboard();
+});
+document.getElementById('adminRefresh').addEventListener('click',loadAdminDashboard);
+document.getElementById('adminLogout').addEventListener('click',()=>{adminSession=null;document.getElementById('adminPassword').value='';document.getElementById('adminDashboard').hidden=true;document.getElementById('adminLoginForm').hidden=false;document.getElementById('adminMessage').textContent='You are logged out.';document.getElementById('adminBookings').replaceChildren();document.getElementById('adminReceipts').replaceChildren();});
+
 update();loadAvailability();
 </script>
 
