@@ -2,32 +2,25 @@
 
 Official booking website for Hideout Pickleball Court.
 
-## Booking setup
+## Booking database setup
 
-1. Open the Supabase project connected to this site.
-2. Open **SQL Editor**.
-3. In this repository, open `supabase/migrations/202611170001_booking_core.sql`.
-4. Copy the entire SQL file into a new Supabase SQL query and run it once.
-5. After it succeeds, open the website and test a booking using a future date.
+The website uses Supabase RPC functions for live availability and automatic booking confirmation.
 
-The migration creates the booking and hourly-slot tables plus two RPC functions:
-- `get_booked_slots` loads unavailable court-hours.
-- `create_booking` confirms a booking and reserves all selected slots in one database transaction. If a slot was taken by someone else, the booking fails rather than double-booking.
+1. Open the Supabase project: https://supabase.com/dashboard/project/dxbkzxvyqgsupdhlzmwv
+2. Open **SQL Editor** and choose **New query**.
+3. Open [supabase/booking-schema.sql](./supabase/booking-schema.sql), copy the entire file, and paste it into the SQL Editor.
+4. Click **Run**.
+5. Open the deployed website and test a booking using a future date.
 
-## Current implementation status
+The schema creates `court_bookings` and `court_booking_slots`, plus the `get_booked_slots` and `create_booking` RPC functions. A successful booking is confirmed immediately. A unique database constraint prevents two customers from reserving the same court and hour.
 
-- Existing website design and embedded logo are preserved.
-- Live court availability and booking submission are connected in the frontend.
-- Booking price: PHP 100 per court-hour; PHP 20 per extra player per hour beyond four; PHP 50 per paddle-and-ball set.
-- Customer booking is automatically confirmed after the database successfully reserves the selected slots.
+## Current scope
 
-## Still required before public launch
+- Two courts, selectable in hourly blocks (24/7)
+- ₱100 per court-hour
+- ₱20 per extra player per hour beyond four players
+- ₱50 per paddle-and-ball set
+- Live booked-slot display
+- Immediate booking confirmation
 
-- Run the SQL migration above in Supabase.
-- Configure GCash receipt upload and owner-only receipt review.
-- Build and secure the owner admin dashboard (username/password flow).
-- Configure and test daily database backups, weekly external copies, and separate receipt-file backups.
-- Add the exact court location and directions.
-- Test on mobile and verify the full booking, cancellation, and restore workflows.
-
-Do not publish the site as fully operational until the remaining launch items have been completed and tested.
+GCash receipt upload, the owner/admin dashboard, and backup automation still need to be completed before launch. Do not treat those features as live yet.
