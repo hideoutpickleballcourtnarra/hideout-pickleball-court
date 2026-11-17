@@ -17,9 +17,11 @@ serve(async (req) => {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
 
+  let stage = "request-start";
   try {
     if (req.method !== "POST") return respond({ error: "Method not allowed" }, 405);
 
+    stage = "read-settings";
     const supabaseUrl = Deno.env.get("SUPABASE_URL");
     const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
     const scriptUrl = Deno.env.get("GOOGLE_APPS_SCRIPT_URL");
@@ -29,6 +31,7 @@ serve(async (req) => {
       return respond({ error: "Server upload settings are incomplete." }, 500);
     }
 
+    stage = "read-request-body";
     const body = await req.json();
     const { booking_id, receipt_id, phone, fileName, mimeType, base64 } = body ?? {};
 
@@ -42,6 +45,7 @@ serve(async (req) => {
       return respond({ error: "Receipt exceeds the 2 MB limit." }, 413);
     }
 
+    stage = "verify-booking";
     const bookingResponse = await fetch(
       `${supabaseUrl}/rest/v1/court_bookings?id=eq.${encodeURIComponent(booking_id)}&select=id,phone,status`,
       { headers: { apikey: serviceKey, Authorization: `Bearer ${serviceKey}` } },
@@ -53,6 +57,7 @@ serve(async (req) => {
       return respond({ error: "Booking reference or mobile number does not match." }, 403);
     }
 
+    stage = "send-to-google-drive";
     const driveResponse = await fetch(scriptUrl, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -64,11 +69,19 @@ serve(async (req) => {
       }),
     });
 
-    const driveResult = await driveResponse.json();
+    const driveResponseText = await driveResponse.text();
+    let driveResult: any;
+    try {
+      driveResult = JSON.parse(driveResponseText);
+    } catch (_parseError) {
+      console.error("Google Drive returned a non-JSON response", { status: driveResponse.status, responsePreview: driveResponseText.slice(0, 300) });
+      return respond({ error: `Google Drive returned an unreadable response (HTTP ${driveResponse.status}).` }, 502);
+    }
     if (!driveResponse.ok || !driveResult?.success) {
       return respond({ error: driveResult?.error || "Google Drive upload failed." }, 502);
     }
 
+    stage = "save-drive-backup-reference";
     const receiptUpdate = await fetch(
       `${supabaseUrl}/rest/v1/court_booking_receipts?id=eq.${encodeURIComponent(receipt_id)}&booking_id=eq.${encodeURIComponent(booking_id)}`,
       {
@@ -88,6 +101,7 @@ serve(async (req) => {
 
     return respond({ success: true, fileId: driveResult.fileId, receiptId: receipt_id });
   } catch (error) {
-    return respond({ error: error instanceof Error ? error.message : "Unexpected upload error." }, 500);
+    console.error("Receipt backup function failed", { stage, error: error instanceof Error ? error.message : String(error), stack: error instanceof Error ? error.stack : undefined });
+    return respond({ error: `Receipt backup failed during ${stage}: ${error instanceof Error ? error.message : "Unexpected upload error."}` }, 500);
   }
 });
