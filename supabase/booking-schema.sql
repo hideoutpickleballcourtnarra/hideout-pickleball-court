@@ -35,7 +35,9 @@ drop policy if exists "Public can read booked court slots" on public.court_booki
 create policy "Public can read booked court slots"
   on public.court_booking_slots for select to anon, authenticated using (true);
 
-create or replace function public.get_booked_slots(p_date date)
+drop function if exists public.get_booked_slots(date);
+
+create function public.get_booked_slots(p_date date)
 returns table(court_number integer, start_hour integer)
 language sql stable security definer
 set search_path = public
