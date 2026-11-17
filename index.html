@@ -62,7 +62,7 @@ function saveAvailabilityPicture(){
  const textColors={available:'#174d35',selected:'#ffffff',booked:'#77827b'};
  let y=320;
  for(let court=1;court<=2;court++){
-  ctx.fillStyle='#174d35';ctx.font='bold 34px system-ui';ctx.fillText('COURT '+court,54,y);
+  ctx.textAlign='left';ctx.fillStyle='#174d35';ctx.font='bold 34px system-ui';ctx.fillText('COURT '+court,54,y);
   const x0=54,top=y+28,gap=12,w= (972-gap*3)/4,h=88;
   for(let hour=0;hour<24;hour++){
    const key=court+'-'+hour;
