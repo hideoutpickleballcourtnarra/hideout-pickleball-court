@@ -86,7 +86,7 @@ begin
     raise exception 'Paddle and ball sets must be between 0 and 20.';
   end if;
   if p_payment_option is null or p_payment_option not in (50,100) then
-    raise exception 'Choose either a 50% deposit or full payment.';
+    raise exception 'Choose either a 50%% deposit or full payment.';
   end if;
   if jsonb_typeof(p_slots) <> 'array' or jsonb_array_length(p_slots) = 0 or jsonb_array_length(p_slots) > 48 then
     raise exception 'Select at least one hourly slot.';
