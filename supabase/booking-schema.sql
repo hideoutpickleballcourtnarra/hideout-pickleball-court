@@ -204,7 +204,7 @@ begin
   if not exists (
     select 1 from public.court_admin_credentials a
     where a.id = 1 and a.username = p_username
-      and a.password_hash = crypt(p_password,a.password_hash)
+      and a.password_hash = extensions.crypt(p_password,a.password_hash)
   ) then
     raise exception 'Incorrect admin username or password.';
   end if;
@@ -227,7 +227,7 @@ begin
   if not exists (
     select 1 from public.court_admin_credentials a
     where a.id = 1 and a.username = p_username
-      and a.password_hash = crypt(p_password,a.password_hash)
+      and a.password_hash = extensions.crypt(p_password,a.password_hash)
   ) then
     raise exception 'Incorrect admin username or password.';
   end if;
@@ -254,7 +254,7 @@ begin
   if not exists (
     select 1 from public.court_admin_credentials a
     where a.id = 1 and a.username = p_username
-      and a.password_hash = crypt(p_password,a.password_hash)
+      and a.password_hash = extensions.crypt(p_password,a.password_hash)
   ) then
     raise exception 'Incorrect admin username or password.';
   end if;
