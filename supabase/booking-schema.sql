@@ -138,3 +138,104 @@ $$;
 grant select on public.court_booking_slots to anon, authenticated;
 grant execute on function public.get_booked_slots(date) to anon, authenticated;
 grant execute on function public.create_booking(text,text,date,integer,integer,integer,jsonb) to anon, authenticated;
+
+
+-- Private receipt records and password-protected admin access.
+create table if not exists public.court_booking_receipts (
+  id uuid primary key default gen_random_uuid(),
+  booking_id uuid not null references public.court_bookings(id) on delete cascade,
+  file_name text not null,
+  mime_type text not null check (mime_type in ('image/jpeg','image/png','image/webp','application/pdf')),
+  data_base64 text not null,
+  uploaded_at timestamptz not null default now(),
+  reviewed_at timestamptz
+);
+create index if not exists court_booking_receipts_booking_idx on public.court_booking_receipts (booking_id);
+alter table public.court_booking_receipts enable row level security;
+
+create table if not exists public.court_admin_credentials (
+  id integer primary key check (id = 1),
+  username text not null unique,
+  password_hash text not null,
+  updated_at timestamptz not null default now()
+);
+alter table public.court_admin_credentials enable row level security;
+
+create or replace function public.submit_booking_receipt(
+  p_booking_id uuid,
+  p_phone text,
+  p_file_name text,
+  p_mime_type text,
+  p_data_base64 text
+) returns jsonb
+language plpgsql security definer set search_path = public
+as $$
+declare v_receipt_id uuid;
+begin
+  if not exists (
+    select 1 from public.court_bookings
+    where id = p_booking_id and trim(phone) = trim(p_phone) and status = 'confirmed'
+  ) then
+    raise exception 'Booking reference or mobile number does not match.';
+  end if;
+  if p_mime_type not in ('image/jpeg','image/png','image/webp','application/pdf') then
+    raise exception 'Upload a JPG, PNG, WEBP, or PDF receipt.';
+  end if;
+  if p_data_base64 is null or length(p_data_base64) < 20 or length(p_data_base64) > 2800000 then
+    raise exception 'Receipt file is too large. Maximum file size is 2 MB.';
+  end if;
+  insert into public.court_booking_receipts(booking_id,file_name,mime_type,data_base64)
+  values (p_booking_id,left(coalesce(p_file_name,'receipt'),180),p_mime_type,p_data_base64)
+  returning id into v_receipt_id;
+  return jsonb_build_object('receipt_id',v_receipt_id);
+end;
+$$;
+
+create or replace function public.admin_list_booking_receipts(p_username text,p_password text)
+returns table(
+  receipt_id uuid, booking_id uuid, customer_name text, phone text,
+  booking_date date, total_amount integer, payment_option integer,
+  payment_amount integer, file_name text, mime_type text,
+  data_base64 text, uploaded_at timestamptz, reviewed_at timestamptz
+)
+language plpgsql security definer set search_path = public
+as $$
+begin
+  if not exists (
+    select 1 from public.court_admin_credentials a
+    where a.id = 1 and a.username = p_username
+      and a.password_hash = crypt(p_password,a.password_hash)
+  ) then
+    raise exception 'Incorrect admin username or password.';
+  end if;
+  return query
+  select r.id,b.id,b.customer_name,b.phone,b.booking_date,b.total_amount,
+         b.payment_option,b.payment_amount,r.file_name,r.mime_type,
+         r.data_base64,r.uploaded_at,r.reviewed_at
+  from public.court_booking_receipts r
+  join public.court_bookings b on b.id = r.booking_id
+  order by r.uploaded_at desc;
+end;
+$$;
+
+create or replace function public.admin_mark_receipt_reviewed(
+  p_username text,p_password text,p_receipt_id uuid
+) returns boolean
+language plpgsql security definer set search_path = public
+as $$
+begin
+  if not exists (
+    select 1 from public.court_admin_credentials a
+    where a.id = 1 and a.username = p_username
+      and a.password_hash = crypt(p_password,a.password_hash)
+  ) then
+    raise exception 'Incorrect admin username or password.';
+  end if;
+  update public.court_booking_receipts set reviewed_at = now() where id = p_receipt_id;
+  return found;
+end;
+$$;
+
+grant execute on function public.submit_booking_receipt(uuid,text,text,text,text) to anon, authenticated;
+grant execute on function public.admin_list_booking_receipts(text,text) to anon, authenticated;
+grant execute on function public.admin_mark_receipt_reviewed(text,text,uuid) to anon, authenticated;
