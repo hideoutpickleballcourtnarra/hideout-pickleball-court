@@ -35,14 +35,26 @@ drop policy if exists "Public can read booked court slots" on public.court_booki
 create policy "Public can read booked court slots"
   on public.court_booking_slots for select to anon, authenticated using (true);
 
-create or replace function public.create_court_booking(
+create or replace function public.get_booked_slots(p_date date)
+returns table(court_number integer, start_hour integer)
+language sql stable security definer
+set search_path = public
+as $$
+  select s.court_number, s.start_hour
+  from public.court_booking_slots s
+  join public.court_bookings b on b.id = s.booking_id
+  where s.booking_date = p_date and b.status = 'confirmed'
+  order by s.court_number, s.start_hour;
+$$;
+
+create or replace function public.create_booking(
   p_customer_name text,
   p_phone text,
-  p_booking_date date,
+  p_date date,
   p_players integer,
   p_paddle_sets integer,
   p_slots jsonb
-) returns uuid
+) returns jsonb
 language plpgsql
 security definer
 set search_path = public
@@ -56,9 +68,9 @@ begin
     raise exception 'Please enter your full name.';
   end if;
   if p_phone is null or length(trim(p_phone)) not between 7 and 30 then
-    raise exception 'Please enter a valid phone number.';
+    raise exception 'Please enter a valid mobile number.';
   end if;
-  if p_booking_date is null or p_booking_date < current_date then
+  if p_date is null or p_date < current_date then
     raise exception 'Please choose today or a future date.';
   end if;
   if p_players is null or p_players not between 1 and 30 then
@@ -74,10 +86,10 @@ begin
   select count(*) into v_slot_count
   from jsonb_to_recordset(p_slots) as x(court integer, hour integer)
   where x.court in (1,2) and x.hour between 0 and 23;
+
   if v_slot_count <> jsonb_array_length(p_slots) then
     raise exception 'One or more selected time slots are invalid.';
   end if;
-
   if (select count(*) from (
     select distinct x.court, x.hour
     from jsonb_to_recordset(p_slots) as x(court integer, hour integer)
@@ -92,31 +104,21 @@ begin
   insert into public.court_bookings
     (customer_name, phone, booking_date, players, paddle_sets, total_amount, status)
   values
-    (trim(p_customer_name), trim(p_phone), p_booking_date, p_players, p_paddle_sets, v_total, 'confirmed')
+    (trim(p_customer_name), trim(p_phone), p_date, p_players, p_paddle_sets, v_total, 'confirmed')
   returning id into v_booking_id;
 
-  insert into public.court_booking_slots (booking_id, booking_date, court_number, start_hour)
-  select v_booking_id, p_booking_date, x.court, x.hour
-  from jsonb_to_recordset(p_slots) as x(court integer, hour integer);
+  begin
+    insert into public.court_booking_slots (booking_id, booking_date, court_number, start_hour)
+    select v_booking_id, p_date, x.court, x.hour
+    from jsonb_to_recordset(p_slots) as x(court integer, hour integer);
+  exception when unique_violation then
+    raise exception 'A selected slot was just been booked. Please choose another time.';
+  end;
 
-  return v_booking_id;
+  return jsonb_build_object('booking_id', v_booking_id, 'total_amount', v_total);
 end;
 $$;
 
-create or replace function public.get_booked_court_slots(p_booking_date date)
-returns table(court_number integer, start_hour integer)
-language sql
-stable
-security definer
-set search_path = public
-as $$
-  select s.court_number, s.start_hour
-  from public.court_booking_slots s
-  join public.court_bookings b on b.id = s.booking_id
-  where s.booking_date = p_booking_date and b.status = 'confirmed'
-  order by s.court_number, s.start_hour;
-$$;
-
 grant select on public.court_booking_slots to anon, authenticated;
-grant execute on function public.create_court_booking(text,text,date,integer,integer,jsonb) to anon, authenticated;
-grant execute on function public.get_booked_court_slots(date) to anon, authenticated;
+grant execute on function public.get_booked_slots(date) to anon, authenticated;
+grant execute on function public.create_booking(text,text,date,integer,integer,jsonb) to anon, authenticated;
