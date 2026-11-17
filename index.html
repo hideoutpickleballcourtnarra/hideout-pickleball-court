@@ -44,3 +44,10 @@ function update(){const n=selected.size,p=Math.max(1,Number(document.getElementB
 document.getElementById('players').addEventListener('input',update);document.getElementById('sets').addEventListener('input',update);update();
 </script>
 </body></html>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script>
+const supabaseClient = window.supabase.createClient(
+  "https://dxbkzxvyqgsupdhlzmwv.supabase.co",
+  "sb_publishable_eQBVn6OP9wB0DlWCRfb4DQ_YNPSaJ26"
+);
+</script>
