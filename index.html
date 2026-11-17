@@ -49,7 +49,7 @@ function update(){const n=selected.size,p=Math.max(1,Number(document.getElementB
 function saveAvailabilityPicture(){
  const date=dateEl.value;
  const canvas=document.createElement('canvas'),ctx=canvas.getContext('2d');
- canvas.width=1080;canvas.height=1450;
+ canvas.width=1080;canvas.height=1800;
  ctx.fillStyle='#f7faf7';ctx.fillRect(0,0,canvas.width,canvas.height);
  ctx.fillStyle='#174d35';ctx.fillRect(0,0,canvas.width,190);
  ctx.fillStyle='#ffffff';ctx.font='bold 54px system-ui';ctx.fillText('HIDEOUT PICKLEBALL COURT',54,82);
@@ -79,8 +79,8 @@ function saveAvailabilityPicture(){
   y+=28+6*(h+10)+74;
  }
  ctx.textAlign='left';ctx.fillStyle='#61736a';ctx.font='22px system-ui';
- ctx.fillText('Available slots may change as bookings are made.',54,1400);
- ctx.font='18px system-ui';ctx.fillText('Generated from the live booking calendar',54,1430);
+ ctx.fillText('Available slots may change as bookings are made.',54,1710);
+ ctx.font='18px system-ui';ctx.fillText('Generated from the live booking calendar',54,1740);
  const url=canvas.toDataURL('image/png');
  const win=window.open();if(win){win.document.write('<title>Hideout Availability</title><img alt="Hideout court availability" src="'+url+'" style="max-width:100%;height:auto">');win.document.close();}
  else{const a=document.createElement('a');a.href=url;a.download='hideout-availability-'+date+'.png';a.click();}
