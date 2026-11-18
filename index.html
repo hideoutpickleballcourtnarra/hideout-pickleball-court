@@ -99,7 +99,35 @@ function saveAvailabilityPicture(){
  else{const a=document.createElement('a');a.href=url;a.download='hideout-availability-'+date+'.png';a.click();}
 }
 document.getElementById('availabilityImageButton').addEventListener('click',saveAvailabilityPicture);
-async function loadAvailability(){selected.clear();update();document.querySelectorAll('.slot').forEach(b=>{b.disabled=true;b.classList.remove('selected','booked');b.setAttribute('aria-pressed','false')});document.getElementById('bookingMessage').textContent='Loading live availability…';const {data,error}=await supabaseClient.rpc('get_booked_slots',{p_date:dateEl.value});if(error){document.getElementById('availabilityImageButton').disabled=true;document.getElementById('bookingMessage').textContent='Live availability is not ready yet. Please try again later.';return;}document.getElementById('availabilityImageButton').disabled=false;const busy=new Set((data||[]).map(x=>`${x.court_number}-${x.start_hour}`));document.querySelectorAll('.slot').forEach(b=>{if(busy.has(b.dataset.key)){b.classList.add('booked');b.disabled=true;}else{b.disabled=false;}});document.getElementById('bookingMessage').textContent='Availability updated. Select your preferred hours.';}
+let availabilityLoading=false;
+async function loadAvailability(preserveSelection=false){
+ if(availabilityLoading)return;
+ availabilityLoading=true;
+ if(!preserveSelection){selected.clear();update();}
+ document.querySelectorAll('.slot').forEach(b=>{b.disabled=true;b.classList.remove('booked');if(!selected.has(b.dataset.key))b.classList.remove('selected');b.setAttribute('aria-pressed',selected.has(b.dataset.key)?'true':'false')});
+ document.getElementById('bookingMessage').textContent='Checking live availability…';
+ try{
+  const {data,error}=await supabaseClient.rpc('get_booked_slots',{p_date:dateEl.value});
+  if(error){document.getElementById('availabilityImageButton').disabled=true;document.getElementById('bookingMessage').textContent='Live availability is not ready yet. Please try again later.';return;}
+  document.getElementById('availabilityImageButton').disabled=false;
+  const busy=new Set((data||[]).map(x=>`${x.court_number}-${x.start_hour}`));
+  let selectionChanged=false;
+  document.querySelectorAll('.slot').forEach(b=>{
+   if(busy.has(b.dataset.key)){
+    if(selected.delete(b.dataset.key))selectionChanged=true;
+    b.classList.remove('selected');b.classList.add('booked');b.disabled=true;
+   }else{
+    b.classList.remove('booked');b.disabled=false;
+    if(selected.has(b.dataset.key))b.classList.add('selected');
+   }
+   b.setAttribute('aria-pressed',selected.has(b.dataset.key)?'true':'false');
+  });
+  if(selectionChanged)update();
+  document.getElementById('bookingMessage').textContent='Availability is kept up to date automatically.';
+ }catch(e){
+  document.getElementById('bookingMessage').textContent='Could not refresh availability. Please try again.';
+ }finally{availabilityLoading=false;}
+}
 dateEl.addEventListener('change',loadAvailability);document.getElementById('players').addEventListener('input',update);document.getElementById('sets').addEventListener('change',update);document.getElementById('paddleChoice').addEventListener('change',update);document.getElementById('paymentOption').addEventListener('change',update);
 let privacyAccepted=false;const privacyOverlay=document.getElementById('privacyOverlay');
 function clearFieldNotice(id){
@@ -185,6 +213,9 @@ document.getElementById('adminLogout').addEventListener('click',()=>{adminSessio
 document.getElementById('privacyConsent').addEventListener('change',e=>{document.getElementById('privacyProceed').disabled=!e.target.checked;});document.getElementById('privacyCancel').addEventListener('click',()=>{privacyOverlay.hidden=true;document.body.classList.remove('confirmation-open');});document.getElementById('privacyProceed').addEventListener('click',()=>{if(!document.getElementById('privacyConsent').checked)return;privacyAccepted=true;privacyOverlay.hidden=true;document.body.classList.remove('confirmation-open');document.getElementById('bookingForm').requestSubmit();});const confirmationOverlay=document.getElementById('confirmationOverlay');function closeBookingConfirmation(){confirmationOverlay.hidden=true;document.body.classList.remove('confirmation-open');}document.getElementById('confirmationDone').addEventListener('click',closeBookingConfirmation);confirmationOverlay.addEventListener('click',event=>{if(event.target===confirmationOverlay)closeBookingConfirmation();});document.addEventListener('keydown',event=>{if(event.key==='Escape'&&!confirmationOverlay.hidden)closeBookingConfirmation();});
 
 update();loadAvailability();
+window.setInterval(()=>{if(!document.hidden)loadAvailability(true);},15000);
+document.addEventListener('visibilitychange',()=>{if(!document.hidden)loadAvailability(true);});
+window.addEventListener('focus',()=>loadAvailability(true));
 </script>
 
 </body>
