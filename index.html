@@ -189,11 +189,11 @@ async function loadAdminDashboard(){
  if(!bookingsResult.data?.length){bookings.textContent='No bookings yet.';}else{
   const table=document.createElement('div');table.style.overflowX='auto';
   const t=document.createElement('table');t.style.width='100%';t.style.borderCollapse='collapse';
-  const headers=['Date','Customer','Email','Mobile','Players','Paddle sets','Total','Pay option','Paid now','Receipts','Status'];
+  const headers=['Date','Customer','Email','Mobile','Players','Paddle sets','Total','Pay option','Paid now','Receipts','Status','Court & time'];
   const thead=document.createElement('thead'),hr=document.createElement('tr');
   headers.forEach(x=>{const th=document.createElement('th');th.textContent=x;th.style.cssText='text-align:left;padding:9px;border-bottom:1px solid #ccc;white-space:nowrap';hr.appendChild(th)});thead.appendChild(hr);t.appendChild(thead);
   const tbody=document.createElement('tbody');
-  bookingsResult.data.forEach(b=>{const tr=document.createElement('tr');const vals=[b.booking_date,b.customer_name,b.customer_email,b.phone,b.players,b.paddle_sets,b.total_amount,' '+b.payment_option+'%',b.payment_amount,b.receipt_count,b.status];vals.forEach((v,i)=>{const td=document.createElement('td');td.textContent=i===5||i===7?'Php '+Number(v).toLocaleString('en-PH'):safeText(v);td.style.cssText='padding:9px;border-bottom:1px solid #ddd;white-space:nowrap';tr.appendChild(td)});tbody.appendChild(tr)});
+  bookingsResult.data.forEach(b=>{const tr=document.createElement('tr');const slotGroups={};(Array.isArray(b.reserved_slots)?b.reserved_slots:[]).forEach(s=>{const court=Number(s.court);if(!slotGroups[court])slotGroups[court]=[];slotGroups[court].push(label(Number(s.hour)));});const courtTime=Object.keys(slotGroups).sort((a,b)=>Number(a)-Number(b)).map(court=>'Court '+court+': '+slotGroups[court].join(', ')).join(' | ')||'No slot details';const vals=[b.booking_date,b.customer_name,b.customer_email,b.phone,b.players,b.paddle_sets,b.total_amount,' '+b.payment_option+'%',b.payment_amount,b.receipt_count,b.status,courtTime];vals.forEach((v,i)=>{const td=document.createElement('td');td.textContent=i===5||i===7?'Php '+Number(v).toLocaleString('en-PH'):safeText(v);td.style.cssText='padding:9px;border-bottom:1px solid #ddd;white-space:nowrap';tr.appendChild(td)});tbody.appendChild(tr)});
   t.appendChild(tbody);table.appendChild(t);bookings.appendChild(table);
  }
  const list=document.getElementById('adminReceipts');list.replaceChildren();
