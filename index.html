@@ -104,7 +104,7 @@ async function loadAvailability(preserveSelection=false){
  if(availabilityLoading)return;
  availabilityLoading=true;
  if(!preserveSelection){selected.clear();update();}
- document.querySelectorAll('.slot').forEach(b=>{b.disabled=true;b.classList.remove('booked');if(!selected.has(b.dataset.key))b.classList.remove('selected');b.setAttribute('aria-pressed',selected.has(b.dataset.key)?'true':'false')});
+ if(!preserveSelection)document.querySelectorAll('.slot').forEach(b=>{b.disabled=true;b.classList.remove('booked');if(!selected.has(b.dataset.key))b.classList.remove('selected');b.setAttribute('aria-pressed',selected.has(b.dataset.key)?'true':'false')});
  document.getElementById('bookingMessage').textContent='Checking live availability…';
  try{
   const {data,error}=await supabaseClient.rpc('get_booked_slots',{p_date:dateEl.value});
