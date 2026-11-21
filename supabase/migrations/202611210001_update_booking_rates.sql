@@ -23,7 +23,7 @@ begin
   if p_customer_name is null or length(trim(p_customer_name)) not between 2 and 120 then
     raise exception 'Please enter your full name.';
   end if;
-  if p_customer_email is null or trim(p_customer_email) !~* '^[A-Z0-9._%+-]+@[A-Z0-9.-]+\\.[A-Z]{2,}$' then
+  if p_customer_email is null or trim(p_customer_email) !~* '^[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}$' then
     raise exception 'Please enter a valid email address.';
   end if;
   if p_phone is null or length(trim(p_phone)) not between 7 and 30 then
