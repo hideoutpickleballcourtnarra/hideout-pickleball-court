@@ -83,8 +83,9 @@ serve(async (req) => {
         return respond({ error: emailResult?.error || "Confirmation email could not be sent." }, 502);
       }
 
-      // Notify both court administrators after the customer confirmation is sent.
-      let adminNotificationSent = false;
+      // Send a separate notification request to each administrator. This avoids
+      // recipient parsing issues and lets one address succeed independently.
+      const adminNotificationResults: { email: string; sent: boolean }[] = [];
       try {
         stage = "load-booking-slots-for-admin";
         const slotsResponse = await fetch(
@@ -102,10 +103,10 @@ serve(async (req) => {
           const end = new Date(2000, 0, 1, h + 1);
           return `${start.toLocaleTimeString("en-PH", { hour: "numeric", minute: "2-digit", hour12: true })}–${end.toLocaleTimeString("en-PH", { hour: "numeric", minute: "2-digit", hour12: true })}`;
         };
-        const slotLines = (slots || []).map((slot: any) => `Court ${slot.court_number} — ${timeLabel(slot.start_hour)}`).join("\\n");
         const money = (value: unknown) => `Php ${Number(value || 0).toLocaleString("en-PH", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
         const paymentLabel = Number(booking.payment_option) === 50 ? "50% deposit" : "Full payment";
         const balance = Math.max(0, Number(booking.total_amount) - Number(booking.payment_amount));
+        const slotLines = (slots || []).map((slot: any) => `Court ${slot.court_number} — ${timeLabel(slot.start_hour)}`).join("\\n");
         const adminText = [
           "A new booking has been confirmed at Hideout Pickleball Court.",
           "",
@@ -140,31 +141,43 @@ serve(async (req) => {
           ["Amount to pay now", money(booking.payment_amount)],
           ...(Number(booking.payment_option) === 50 ? [["Remaining balance", money(balance)]] : []),
         ].map(([label, value]) => `<tr><td style="padding:9px;border-bottom:1px solid #ddd;color:#587363">${esc(label)}</td><td style="padding:9px;border-bottom:1px solid #ddd;font-weight:bold">${label === "Reserved court times" ? value : esc(value)}</td></tr>`).join("")}</table><p style="color:#668071;font-size:12px;margin-top:20px">Automatic notification from Hideout Pickleball Court.</p></div>`;
-        stage = "send-admin-booking-notification";
-        const adminResponse = await fetch(scriptUrl, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            secret: uploadSecret,
-            action: "send_email",
-            to: "hideoutpickleballcourt.narra@gmail.com,xopiatolentino@gmail.com",
-            subject: `NEW BOOKING — Hideout Pickleball Court — ${dateLabel}`,
-            body: adminText,
-            htmlBody: adminHtml,
-          }),
-        });
-        const adminResponseText = await adminResponse.text();
-        let adminResult: any;
-        try { adminResult = JSON.parse(adminResponseText); }
-        catch (_parseError) { throw new Error(`Admin email service returned an unreadable response (HTTP ${adminResponse.status}).`); }
-        if (!adminResponse.ok || !adminResult?.success) throw new Error(adminResult?.error || "Admin notification could not be sent.");
-        adminNotificationSent = true;
+        for (const adminEmail of ["hideoutpickleballcourt.narra@gmail.com", "xopiatolentino@gmail.com"]) {
+          try {
+            stage = `send-admin-booking-notification-${adminEmail}`;
+            const adminResponse = await fetch(scriptUrl, {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                secret: uploadSecret,
+                action: "send_email",
+                to: adminEmail,
+                subject: `NEW BOOKING — Hideout Pickleball Court — ${dateLabel}`,
+                body: adminText,
+                htmlBody: adminHtml,
+              }),
+            });
+            const adminResponseText = await adminResponse.text();
+            let adminResult: any;
+            try { adminResult = JSON.parse(adminResponseText); }
+            catch (_parseError) { throw new Error(`Email service returned unreadable response (HTTP ${adminResponse.status}).`); }
+            if (!adminResponse.ok || !adminResult?.success) throw new Error(adminResult?.error || "Notification could not be sent.");
+            adminNotificationResults.push({ email: adminEmail, sent: true });
+          } catch (adminError) {
+            console.error("Admin booking notification failed", {
+              bookingId,
+              recipient: adminEmail,
+              error: adminError instanceof Error ? adminError.message : String(adminError),
+            });
+            adminNotificationResults.push({ email: adminEmail, sent: false });
+          }
+        }
       } catch (adminError) {
-        console.error("Admin booking notification failed", {
+        console.error("Admin booking notification preparation failed", {
           bookingId,
           error: adminError instanceof Error ? adminError.message : String(adminError),
         });
       }
+      const adminNotificationSent = adminNotificationResults.length === 2 && adminNotificationResults.every((result) => result.sent);
 
       return respond({ success: true, emailSent: true, adminNotificationSent });
     }
