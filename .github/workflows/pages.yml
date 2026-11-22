@@ -1,5 +1,6 @@
 name: Deploy Hideout Pickleball Court to GitHub Pages
 
+# Each push starts a fresh Pages deployment run with a single artifact.
 on:
   push:
     branches: ["main"]
