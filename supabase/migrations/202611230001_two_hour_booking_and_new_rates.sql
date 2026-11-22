@@ -68,7 +68,7 @@ begin
 
   if (select count(distinct x.court)
       from jsonb_to_recordset(p_slots) as x(court integer, hour integer)) <> 1
-     or v_max_hour - v_min_hour <> 1 then
+     or v_max_hour - v_min_hour not in (1,23) then
     raise exception 'The two selected hours must be consecutive and on the same court.';
   end if;
 
