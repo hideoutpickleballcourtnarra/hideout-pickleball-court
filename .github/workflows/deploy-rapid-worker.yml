@@ -2,6 +2,11 @@ name: Deploy Supabase rapid-worker
 
 on:
   workflow_dispatch:
+  push:
+    branches: ["main"]
+    paths:
+      - "supabase/functions/rapid-worker/**"
+      - ".github/workflows/deploy-rapid-worker.yml"
 
 jobs:
   deploy:
