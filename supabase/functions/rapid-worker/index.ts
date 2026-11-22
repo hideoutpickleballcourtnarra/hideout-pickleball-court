@@ -42,7 +42,7 @@ serve(async (req) => {
       if (!bookingId) return respond({ error: "Missing booking reference." }, 400);
 
       const bookingResponse = await fetch(
-        `${supabaseUrl}/rest/v1/court_bookings?id=eq.${encodeURIComponent(bookingId)}&select=id,customer_name,customer_email,status`,
+        `${supabaseUrl}/rest/v1/court_bookings?id=eq.${encodeURIComponent(bookingId)}&select=id,customer_name,customer_email,phone,booking_date,players,paddle_sets,total_amount,payment_option,payment_amount,status`,
         { headers: { apikey: serviceKey, Authorization: `Bearer ${serviceKey}` } },
       );
       if (!bookingResponse.ok) {
@@ -83,7 +83,90 @@ serve(async (req) => {
         return respond({ error: emailResult?.error || "Confirmation email could not be sent." }, 502);
       }
 
-      return respond({ success: true, emailSent: true });
+      // Notify both court administrators after the customer confirmation is sent.
+      let adminNotificationSent = false;
+      try {
+        stage = "load-booking-slots-for-admin";
+        const slotsResponse = await fetch(
+          `${supabaseUrl}/rest/v1/court_booking_slots?booking_id=eq.${encodeURIComponent(bookingId)}&select=court_number,start_hour&order=court_number.asc,start_hour.asc`,
+          { headers: { apikey: serviceKey, Authorization: `Bearer ${serviceKey}` } },
+        );
+        if (!slotsResponse.ok) throw new Error("Could not load reserved court times.");
+        const slots = await slotsResponse.json();
+        const dateLabel = new Date(`${booking.booking_date}T00:00:00+08:00`).toLocaleDateString("en-PH", {
+          weekday: "long", year: "numeric", month: "long", day: "numeric", timeZone: "Asia/Manila",
+        });
+        const timeLabel = (hour: number) => {
+          const h = Number(hour);
+          const start = new Date(2000, 0, 1, h);
+          const end = new Date(2000, 0, 1, h + 1);
+          return `${start.toLocaleTimeString("en-PH", { hour: "numeric", minute: "2-digit", hour12: true })}–${end.toLocaleTimeString("en-PH", { hour: "numeric", minute: "2-digit", hour12: true })}`;
+        };
+        const slotLines = (slots || []).map((slot: any) => `Court ${slot.court_number} — ${timeLabel(slot.start_hour)}`).join("\\n");
+        const money = (value: unknown) => `Php ${Number(value || 0).toLocaleString("en-PH", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+        const paymentLabel = Number(booking.payment_option) === 50 ? "50% deposit" : "Full payment";
+        const balance = Math.max(0, Number(booking.total_amount) - Number(booking.payment_amount));
+        const adminText = [
+          "A new booking has been confirmed at Hideout Pickleball Court.",
+          "",
+          `Booking reference: ${booking.id}`,
+          `Customer: ${booking.customer_name}`,
+          `Email: ${booking.customer_email}`,
+          `Mobile: ${booking.phone}`,
+          `Booking date: ${dateLabel}`,
+          "Reserved court times:",
+          slotLines || "No slot details returned.",
+          `Players: ${booking.players}`,
+          `Paddle rental sets: ${booking.paddle_sets}`,
+          `Total amount: ${money(booking.total_amount)}`,
+          `Payment option: ${paymentLabel}`,
+          `Amount to pay now: ${money(booking.payment_amount)}`,
+          ...(Number(booking.payment_option) === 50 ? [`Remaining balance: ${money(balance)}`] : []),
+          "",
+          "This is an automatic booking notification.",
+        ].join("\\n");
+        const esc = (value: unknown) => String(value ?? "").replace(/[&<>"]/g, (ch) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[ch] || ch));
+        const adminHtml = `<div style="font-family:Arial,sans-serif;color:#263b2e;max-width:620px;margin:auto"><h2 style="background:#176b45;color:white;padding:20px">NEW BOOKING CONFIRMED</h2><p>A new booking has been confirmed at <b>Hideout Pickleball Court</b>.</p><table style="border-collapse:collapse;width:100%">${[
+          ["Booking reference", booking.id],
+          ["Customer", booking.customer_name],
+          ["Email", booking.customer_email],
+          ["Mobile", booking.phone],
+          ["Booking date", dateLabel],
+          ["Reserved court times", (slots || []).map((slot: any) => `Court ${slot.court_number} — ${timeLabel(slot.start_hour)}`).join("<br>") || "No slot details returned."],
+          ["Players", booking.players],
+          ["Paddle rental sets", booking.paddle_sets],
+          ["Total amount", money(booking.total_amount)],
+          ["Payment option", paymentLabel],
+          ["Amount to pay now", money(booking.payment_amount)],
+          ...(Number(booking.payment_option) === 50 ? [["Remaining balance", money(balance)]] : []),
+        ].map(([label, value]) => `<tr><td style="padding:9px;border-bottom:1px solid #ddd;color:#587363">${esc(label)}</td><td style="padding:9px;border-bottom:1px solid #ddd;font-weight:bold">${label === "Reserved court times" ? value : esc(value)}</td></tr>`).join("")}</table><p style="color:#668071;font-size:12px;margin-top:20px">Automatic notification from Hideout Pickleball Court.</p></div>`;
+        stage = "send-admin-booking-notification";
+        const adminResponse = await fetch(scriptUrl, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            secret: uploadSecret,
+            action: "send_email",
+            to: "hideoutpickleballcourt.narra@gmail.com,xopiatolentino@gmail.com",
+            subject: `NEW BOOKING — Hideout Pickleball Court — ${dateLabel}`,
+            body: adminText,
+            htmlBody: adminHtml,
+          }),
+        });
+        const adminResponseText = await adminResponse.text();
+        let adminResult: any;
+        try { adminResult = JSON.parse(adminResponseText); }
+        catch (_parseError) { throw new Error(`Admin email service returned an unreadable response (HTTP ${adminResponse.status}).`); }
+        if (!adminResponse.ok || !adminResult?.success) throw new Error(adminResult?.error || "Admin notification could not be sent.");
+        adminNotificationSent = true;
+      } catch (adminError) {
+        console.error("Admin booking notification failed", {
+          bookingId,
+          error: adminError instanceof Error ? adminError.message : String(adminError),
+        });
+      }
+
+      return respond({ success: true, emailSent: true, adminNotificationSent });
     }
 
     const { booking_id, receipt_id, phone, fileName, mimeType, base64 } = body ?? {};
